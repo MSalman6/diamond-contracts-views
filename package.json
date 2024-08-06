@@ -1,4 +1,10 @@
 {
+
+  "scripts": {
+    "deploy-for-chainspec": "npx hardhat run scripts/deployForChainspec.ts"
+  },
+
+
   "dependencies": {
     "hardhat": "^2.12.2"
   },
