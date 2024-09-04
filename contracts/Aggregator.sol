@@ -19,8 +19,8 @@ interface IValidatorSetHbbft {
     function getPendingValidators() external view returns (address[] memory);
 
     // require mining address
-    function banCounter(address) external view returns (uint256);
-    function bannedUntil(address) external view returns (uint256);
+    function _unused2(address) external view returns (uint256); // banCounter
+    function _unused3(address) external view returns (uint256); // bannedUntil
     function miningByStakingAddress(address) external view returns (address);
     function validatorAvailableSince(address) external view returns (uint256);
     function getPendingValidatorKeyGenerationMode(address) external view returns (KeyGenMode);
@@ -202,8 +202,8 @@ contract DMDAggregator {
             address miningAddress = vs.miningByStakingAddress(_sAs[i]);
             poolsData[i] = PoolData({
                 miningAddress: miningAddress,
-                banCount: vs.banCounter(miningAddress),
-                bannedUntil: vs.bannedUntil(miningAddress),
+                banCount: vs._unused2(miningAddress),
+                bannedUntil: vs._unused3(miningAddress),
                 availableSince: vs.validatorAvailableSince(miningAddress),
                 publicKey: vs.getPublicKey(miningAddress),
                 delegators: st.poolDelegators(_sAs[i]),
