@@ -1,14 +1,19 @@
 {
-
   "scripts": {
     "deploy-for-chainspec": "npx hardhat run scripts/deployForChainspec.ts"
   },
-
-
-  "dependencies": {
-    "hardhat": "^2.12.2"
-  },
   "devDependencies": {
-    "@nomicfoundation/hardhat-toolbox": "^2.0.2"
+    "@nomicfoundation/hardhat-ethers": "^3.0.6",
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "@openzeppelin/hardhat-upgrades": "^3.1.1",
+    "dotenv": "^16.4.5",
+    "hardhat": "^2.12.2",
+    "typescript": "^5.4.5"
+  },
+  "overrides": {
+    "typescript": "^5.4.5"
+  },
+  "dependencies": {
+    "@solidstate/contracts": "^0.0.60"
   }
 }

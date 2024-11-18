@@ -11,3 +11,5 @@ artifacts
 out
 
 package-lock.json
+
+.mnemonic
