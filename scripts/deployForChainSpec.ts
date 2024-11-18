@@ -1,5 +1,6 @@
 import fs from "fs";
 import hre from "hardhat";
+import { ethers } from "hardhat";
 import { getInitializerData } from "@openzeppelin/hardhat-upgrades/dist/utils";
 
 const aggregatorProxyAddress = "0x9990000000000000000000000000000000000000";
@@ -11,6 +12,8 @@ interface ContractSpec {
 }
 
 async function compileProxy() {
+    const [deployer] = await ethers.getSigners();
+    
     const proxyFactory = await hre.ethers.getContractFactory("TransparentUpgradeableProxy");
 
     const dmdAggregatorFactory = await hre.ethers.getContractFactory("DMDAggregator");
@@ -23,6 +26,7 @@ async function compileProxy() {
     };
 
     let aggregatorInitArgs: any[] = [
+        deployer.address,
         '0x1100000000000000000000000000000000000001', // Staking
         '0x1000000000000000000000000000000000000001', // ValidatorSet
         '0x4000000000000000000000000000000000000001' // TxPermisson

@@ -8,6 +8,7 @@ async function deploy() {
   console.log("Deploying DMDAggregator contract");
 
   const args = [
+    deployer.address,
     '0x1100000000000000000000000000000000000001', // Staking
     '0x1000000000000000000000000000000000000001', // ValidatorSet
     '0x4000000000000000000000000000000000000001' // TxPermisson
