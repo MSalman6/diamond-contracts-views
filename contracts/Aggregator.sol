@@ -36,6 +36,7 @@ contract DMDAggregator is Initializable, OwnableUpgradeable {
     }
     
     function initialize(address _st, address _vs, address _tp) external initializer {
+        __Ownable_init(msg.sender);
         DMDAggregatorStorage storage s = _getStorage();
         s.st = IStakingHbbft(_st);
         s.tp = ITxPermission(_tp);
