@@ -1,29 +1,32 @@
 import { ethers } from "hardhat";
-import { deployProxy, verifyContract } from "../utils/deployment";
+import { verifyContract } from "../utils/deployment";
 
 async function deploy() {
   const [deployer] = await ethers.getSigners();
 
   console.log("Deploying from: ", deployer.address);
-  console.log("Deploying DMDAggregator contract");
 
   const args = [
-    '0x1100000000000000000000000000000000000001', // Staking
-    '0x1000000000000000000000000000000000000001', // ValidatorSet
-    '0x4000000000000000000000000000000000000001' // TxPermisson
-  ]
+    deployer.address,
+    '0x1100000000000000000000000000000000000001',  // Staking
+    '0x1000000000000000000000000000000000000001',   // ValidatorSet
+    '0x4000000000000000000000000000000000000001', // TxPermisson
+  ];
 
-  // Deploy the DMDAggregator contract using a proxy for upgradeability
-  const dao = await deployProxy("DMDAggregator", args);
+  // Deploy the DMDAggregator contract
+  const DMDAggregator = await ethers.getContractFactory('DMDAggregator');
+  const dmdAggregator = await DMDAggregator.deploy(
+    args[0],
+    args[1],
+    args[2],
+    args[3]
+  );
 
-  await dao.waitForDeployment();
+  await dmdAggregator.waitForDeployment();
+  console.log("DMDAggregator deployed at: ", await dmdAggregator.getAddress());
+  console.log("Verifying DMDAggregator contract...");
 
-  console.log("DMDAggregator deployed at: ", await dao.getAddress());
-
-  console.log("Verifying DMDAggregator contract");
-
-  await verifyContract(dao, args, 60);
-
+  await verifyContract(dmdAggregator, args, 60);
   console.log("Done.");
 }
 

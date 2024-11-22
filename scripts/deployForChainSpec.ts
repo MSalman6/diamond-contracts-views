@@ -1,40 +1,26 @@
 import fs from "fs";
-import hre from "hardhat";
-import { getInitializerData } from "@openzeppelin/hardhat-upgrades/dist/utils";
-
-const aggregatorProxyAddress = "0x9990000000000000000000000000000000000000";
-const aggregatorImplementationAddress = "0x9999000000000000000000000000000000000000";
+import { ethers } from "hardhat";
 
 interface ContractSpec {
     balance: string,
     constructor: string
 }
 
-async function compileProxy() {
-    const proxyFactory = await hre.ethers.getContractFactory("TransparentUpgradeableProxy");
-
-    const dmdAggregatorFactory = await hre.ethers.getContractFactory("DMDAggregator");
+async function deployForChainspec() {
+    const [deployer] = await ethers.getSigners();
+    const dmdAggregatorFactory = await ethers.getContractFactory("DMDAggregator");
+    
+    const initialOwner = deployer.address;
+    const staking = '0x1100000000000000000000000000000000000001'; // Staking
+    const validatorSet = '0x1000000000000000000000000000000000000001'; // ValidatorSet
+    const txPermisson = '0x4000000000000000000000000000000000000001' // TxPermisson
 
     let spec: { [id: string]: ContractSpec; } = {};
 
-    spec[aggregatorImplementationAddress] = {
+    const aggregatorAddress = "0x9990000000000000000000000000000000000000";
+    spec[aggregatorAddress] = {
         balance: "0",
-        constructor: (await dmdAggregatorFactory.getDeployTransaction()).data
-    };
-
-    let aggregatorInitArgs: any[] = [
-        '0x1100000000000000000000000000000000000001', // Staking
-        '0x1000000000000000000000000000000000000001', // ValidatorSet
-        '0x4000000000000000000000000000000000000001' // TxPermisson
-    ];
-
-    console.log("Initializer Arguments:", aggregatorInitArgs);
-    const initializerData = getInitializerData(dmdAggregatorFactory.interface, aggregatorInitArgs, 'initialize');
-
-    let proxyDeployTX = await proxyFactory.getDeployTransaction(aggregatorImplementationAddress, aggregatorProxyAddress, initializerData);
-    spec[aggregatorProxyAddress] = {
-        balance: "0",
-        constructor: proxyDeployTX.data
+        constructor: (await dmdAggregatorFactory.getDeployTransaction(initialOwner, staking, validatorSet, txPermisson)).data
     };
 
     if (!fs.existsSync("out")) {
@@ -42,6 +28,7 @@ async function compileProxy() {
     }
 
     fs.writeFileSync("out/spec_aggregator.json", JSON.stringify(spec));
+    console.log("Chainspec generated.");
 }
 
-compileProxy();
+deployForChainspec();

@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache 2.0
 pragma solidity =0.8.25;
 
-import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
+import { Initializable } from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import { OwnableUpgradeable } from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 
 import { IStakingHbbft } from "./interfaces/IStakingHbbft.sol";
 import { ITxPermission } from "./interfaces/ITxPermission.sol";
@@ -9,19 +10,39 @@ import { IKeyGenHistory } from "./interfaces/IKeyGenHistory.sol";
 import { IBlockRewardHbbft } from "./interfaces/IBlockRewardHbbft.sol";
 import { IValidatorSetHbbft } from "./interfaces/IValidatorSetHbbft.sol";
 
-contract DMDAggregator is Ownable {
-    IStakingHbbft st;
-    ITxPermission tp;
-    IKeyGenHistory kh;
-    IBlockRewardHbbft br;
-    IValidatorSetHbbft vs;
+contract DMDAggregatorUpgradeable is Initializable, OwnableUpgradeable {
+    bytes32 private constant DMD_AGGREGATOR_NAMESPACE = keccak256(abi.encode(uint256(keccak256("dmdaggregator.storage")) - 1)) & ~bytes32(uint256(0xff));
 
-    constructor(address initialOwner, address _st, address _vs, address _tp) Ownable(initialOwner) {
-        st = IStakingHbbft(_st);
-        tp = ITxPermission(_tp);
-        vs = IValidatorSetHbbft(_vs);
-        kh = IKeyGenHistory(vs.keyGenHistoryContract());
-        br = IBlockRewardHbbft(vs.blockRewardContract());
+    struct DMDAggregatorStorage {
+        IStakingHbbft st;
+        ITxPermission tp;
+        IKeyGenHistory kh;
+        IBlockRewardHbbft br;
+        IValidatorSetHbbft vs;
+    }
+
+    function _getStorage() private pure returns (DMDAggregatorStorage storage s) {
+        bytes32 slot = DMD_AGGREGATOR_NAMESPACE;
+        // solhint-disable-next-line no-inline-assembly
+        assembly {
+            s.slot := slot
+        }
+    }
+
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        // Prevents initialization of implementation contract
+        _disableInitializers();
+    }
+    
+    function initialize(address contractOwner, address _st, address _vs, address _tp) external initializer {
+        __Ownable_init(contractOwner);
+        DMDAggregatorStorage storage s = _getStorage();
+        s.st = IStakingHbbft(_st);
+        s.tp = ITxPermission(_tp);
+        s.vs = IValidatorSetHbbft(_vs);
+        s.kh = IKeyGenHistory(s.vs.keyGenHistoryContract());
+        s.br = IBlockRewardHbbft(s.vs.blockRewardContract());
     }
 
     struct Pools {
@@ -108,37 +129,39 @@ contract DMDAggregator is Ownable {
 
     // SETTERS
     function setStakingContract(address _st) external onlyOwner {
-        st = IStakingHbbft(_st);
+        _getStorage().st = IStakingHbbft(_st);
     }
 
     function setValidatorsSetContract(address _vs) external onlyOwner {
-        vs = IValidatorSetHbbft(_vs);
+        _getStorage().vs = IValidatorSetHbbft(_vs);
     }
 
     function setTxPermissionContract(address _tp) external onlyOwner {
-        tp = ITxPermission(_tp);
+        _getStorage().tp = ITxPermission(_tp);
     }
 
     function setKeygenHistoryContract(address _kh) external onlyOwner {
-        kh = IKeyGenHistory(_kh);
+        _getStorage().kh = IKeyGenHistory(_kh);
     }
 
     function setBlockRewardContract(address _br) external onlyOwner {
-        br = IBlockRewardHbbft(_br);
+        _getStorage().br = IBlockRewardHbbft(_br);
     }
 
     // GETTERS
     function getAllPools() external view returns (Pools memory pools) {
-        address[] memory vsValidatorsMiningAddresses = vs.getValidators();
-        address[] memory vsPendingValidatorsMiningAddresses = vs.getPendingValidators();
+        DMDAggregatorStorage storage s = _getStorage();
+
+        address[] memory vsValidatorsMiningAddresses = s.vs.getValidators();
+        address[] memory vsPendingValidatorsMiningAddresses = s.vs.getPendingValidators();
         
         address[] memory vsValidatorsStakingAddresses = getStakingAddresses(vsValidatorsMiningAddresses);
         address[] memory vsPendingValidatorsStakingAddresses = getStakingAddresses(vsPendingValidatorsMiningAddresses);
 
         pools = Pools({
-            stActivePools: st.getPools(),
-            stInActivePools: st.getPoolsInactive(),
-            stPoolsToBeElected: st.getPoolsToBeElected(),
+            stActivePools: s.st.getPools(),
+            stInActivePools: s.st.getPoolsInactive(),
+            stPoolsToBeElected: s.st.getPoolsToBeElected(),
             vsValidatorsMiningAddresses: vsValidatorsMiningAddresses,
             vsValidatorsStakingAddresses: vsValidatorsStakingAddresses,
             vsPendingValidatorsMiningAddresses: vsPendingValidatorsMiningAddresses,
@@ -147,69 +170,74 @@ contract DMDAggregator is Ownable {
     }
 
     function getPoolsData(address[] memory _sAs) external view returns (PoolData[] memory poolsData) {
+        DMDAggregatorStorage storage s = _getStorage();
         poolsData = new PoolData[](_sAs.length);
 
         for (uint256 i = 0; i < _sAs.length; i++) {
-            address miningAddress = vs.miningByStakingAddress(_sAs[i]);
+            address miningAddress = s.vs.miningByStakingAddress(_sAs[i]);
             poolsData[i] = PoolData({
                 miningAddress: miningAddress,
-                availableSince: vs.validatorAvailableSince(miningAddress),
-                publicKey: vs.getPublicKey(miningAddress),
-                delegators: st.poolDelegators(_sAs[i]),
-                keygenMode: vs.getPendingValidatorKeyGenerationMode(miningAddress),
-                stakedAmountTotal: st.stakeAmountTotal(_sAs[i])
+                availableSince: s.vs.validatorAvailableSince(miningAddress),
+                publicKey: s.vs.getPublicKey(miningAddress),
+                delegators: s.st.poolDelegators(_sAs[i]),
+                keygenMode: s.vs.getPendingValidatorKeyGenerationMode(miningAddress),
+                stakedAmountTotal: s.st.stakeAmountTotal(_sAs[i])
             });
         }
     }
 
     function getUserStakes(address _user, address[] calldata _pools) external view returns(StakeData[] memory _stakesData) {
+        DMDAggregatorStorage storage s = _getStorage();
         _stakesData = new StakeData[](_pools.length);
 
         for (uint256 i = 0; i < _pools.length; i++) {
             _stakesData[i] = StakeData({
                 pool: _pools[i],
-                myStakedAmount: st.stakeAmount(_pools[i], _user),
-                stakedAmountTotal: st.stakeAmountTotal(_pools[i])
+                myStakedAmount: s.st.stakeAmount(_pools[i], _user),
+                stakedAmountTotal: s.st.stakeAmountTotal(_pools[i])
             });
         }
     }
 
     function getUserOrderedWithdraws(address _user, address[] calldata _pools) external view returns(OrderedWithdrawData[] memory _stakesData) {
+        DMDAggregatorStorage storage s = _getStorage();
         _stakesData = new OrderedWithdrawData[](_pools.length);
 
         for (uint256 i = 0; i < _pools.length; i++) {
             _stakesData[i] = OrderedWithdrawData({
                 pool: _pools[i],
-                orderedAmount: st.orderedWithdrawAmount(_pools[i], _user),
-                withdrawEpoch: st.orderWithdrawEpoch(_pools[i], _user)
+                orderedAmount: s.st.orderedWithdrawAmount(_pools[i], _user),
+                withdrawEpoch: s.st.orderWithdrawEpoch(_pools[i], _user)
             });
         }
     }
 
     function getGlobals() external view returns (GlobalsData memory _globalsData) {
+        DMDAggregatorStorage storage s = _getStorage();
         _globalsData = GlobalsData({
-            deltaPot: br.deltaPot(),
-            reinsertPot: br.reinsertPot(),
-            keygenRound: kh.getCurrentKeyGenRound(),
-            stakingEpoch: st.stakingEpoch(),
-            minimumGasPrice: tp.minimumGasPrice(),
-            candidateMinStake: st.candidateMinStake(),
-            delegatorMinStake: st.delegatorMinStake(),
-            stakingEpochStartTime: st.stakingEpochStartTime(),
-            stakingEpochStartBlock: st.stakingEpochStartBlock(),
-            areStakeAndWithdrawAllowed: st.areStakeAndWithdrawAllowed(),
-            stakingFixedEpochEndTime: st.stakingFixedEpochEndTime(),
-            stakingFixedEpochDuration: st.stakingFixedEpochDuration(),
-            stakingWithdrawDisallowPeriod: st.stakingWithdrawDisallowPeriod()
+            deltaPot: s.br.deltaPot(),
+            reinsertPot: s.br.reinsertPot(),
+            keygenRound: s.kh.getCurrentKeyGenRound(),
+            stakingEpoch: s.st.stakingEpoch(),
+            minimumGasPrice: s.tp.minimumGasPrice(),
+            candidateMinStake: s.st.candidateMinStake(),
+            delegatorMinStake: s.st.delegatorMinStake(),
+            stakingEpochStartTime: s.st.stakingEpochStartTime(),
+            stakingEpochStartBlock: s.st.stakingEpochStartBlock(),
+            areStakeAndWithdrawAllowed: s.st.areStakeAndWithdrawAllowed(),
+            stakingFixedEpochEndTime: s.st.stakingFixedEpochEndTime(),
+            stakingFixedEpochDuration: s.st.stakingFixedEpochDuration(),
+            stakingWithdrawDisallowPeriod: s.st.stakingWithdrawDisallowPeriod()
         });
     }
 
     function getDelegationsData(address[] memory delegators, address poolAddress) external view returns (DelegateData[] memory _delegatesData, uint256 _ownStake, uint256 _candidateStake) {
+        DMDAggregatorStorage storage s = _getStorage();
         _delegatesData = new DelegateData[](delegators.length);
 
         for (uint256 i; i < delegators.length; i++) {
             address delegatorAddress = delegators[i];
-            uint256 delegatedAmount = st.stakeAmount(poolAddress, delegatorAddress);
+            uint256 delegatedAmount = s.st.stakeAmount(poolAddress, delegatorAddress);
             _delegatesData[i] = DelegateData({
                 delegator: delegatorAddress,
                 delegatedAmount: delegatedAmount
@@ -217,7 +245,7 @@ contract DMDAggregator is Ownable {
             if (poolAddress != delegatorAddress) _candidateStake += delegatedAmount;
         }
 
-        _ownStake = st.stakeAmountTotal(poolAddress) - _candidateStake;
+        _ownStake = s.st.stakeAmountTotal(poolAddress) - _candidateStake;
     }
 
     function getStakingAddresses(address[] memory miningAddresses) 
@@ -225,10 +253,11 @@ contract DMDAggregator is Ownable {
         view 
         returns (address[] memory)
     {
+        DMDAggregatorStorage storage s = _getStorage();
         address[] memory stakingAddresses = new address[](miningAddresses.length);
         
         for (uint256 i = 0; i < miningAddresses.length; i++) {
-            stakingAddresses[i] = vs.stakingByMiningAddress(miningAddresses[i]);
+            stakingAddresses[i] = s.vs.stakingByMiningAddress(miningAddresses[i]);
         }
         
         return stakingAddresses;
