@@ -11,6 +11,8 @@ interface IValidatorSetHbbft {
         AllKeysDone
     }
 
+    function bonusScoreSystem() external view returns(address);
+
     function blockRewardContract() external view returns(address);
     function keyGenHistoryContract() external view returns(address);
 

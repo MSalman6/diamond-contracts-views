@@ -7,21 +7,27 @@ import { IStakingHbbft } from "./interfaces/IStakingHbbft.sol";
 import { ITxPermission } from "./interfaces/ITxPermission.sol";
 import { IKeyGenHistory } from "./interfaces/IKeyGenHistory.sol";
 import { IBlockRewardHbbft } from "./interfaces/IBlockRewardHbbft.sol";
+import { IBonusScoreSystem } from "./interfaces/IBonusScoreSystem.sol";
 import { IValidatorSetHbbft } from "./interfaces/IValidatorSetHbbft.sol";
+import { IConnectivityTracker } from "./interfaces/IConnectivityTracker.sol";
 
 contract DMDAggregator is Ownable {
     IStakingHbbft st;
     ITxPermission tp;
     IKeyGenHistory kh;
     IBlockRewardHbbft br;
+    IBonusScoreSystem bs;
     IValidatorSetHbbft vs;
+    IConnectivityTracker ct;
 
     constructor(address initialOwner, address _st, address _vs, address _tp) Ownable(initialOwner) {
         st = IStakingHbbft(_st);
         tp = ITxPermission(_tp);
         vs = IValidatorSetHbbft(_vs);
+        bs = IBonusScoreSystem(vs.bonusScoreSystem());
         kh = IKeyGenHistory(vs.keyGenHistoryContract());
         br = IBlockRewardHbbft(vs.blockRewardContract());
+        ct = IConnectivityTracker(bs.connectivityTracker());
     }
 
     struct Pools {
@@ -57,6 +63,9 @@ contract DMDAggregator is Ownable {
         address[] delegators;
         IValidatorSetHbbft.KeyGenMode keygenMode;
         uint256 stakedAmountTotal;
+        bool isFaultyValidator;
+        uint256 validatorScore;
+        uint256 connectivityScore;
     }
 
     struct StakeData {
@@ -150,6 +159,7 @@ contract DMDAggregator is Ownable {
         poolsData = new PoolData[](_sAs.length);
 
         for (uint256 i = 0; i < _sAs.length; i++) {
+            uint256 stakingEpoch = st.stakingEpoch();
             address miningAddress = vs.miningByStakingAddress(_sAs[i]);
             poolsData[i] = PoolData({
                 miningAddress: miningAddress,
@@ -157,7 +167,10 @@ contract DMDAggregator is Ownable {
                 publicKey: vs.getPublicKey(miningAddress),
                 delegators: st.poolDelegators(_sAs[i]),
                 keygenMode: vs.getPendingValidatorKeyGenerationMode(miningAddress),
-                stakedAmountTotal: st.stakeAmountTotal(_sAs[i])
+                stakedAmountTotal: st.stakeAmountTotal(_sAs[i]),
+                isFaultyValidator: ct.isFaultyValidator(stakingEpoch, miningAddress),
+                validatorScore: bs.getValidatorScore(miningAddress),
+                connectivityScore: ct.getValidatorConnectivityScore(stakingEpoch, miningAddress)
             });
         }
     }
@@ -232,5 +245,17 @@ contract DMDAggregator is Ownable {
         }
         
         return stakingAddresses;
+    }
+
+    function getNodeOperatorData(address stakingAddress) external view returns (address, uint256) {
+        address operator = st.poolNodeOperator(stakingAddress);
+        uint256 share = st.poolNodeOperatorShare(stakingAddress);
+        return (operator, share);
+    }
+
+    function getWithdrawableAmounts(address poolStAddress, address user) external view returns (uint256, uint256) {
+        uint256 maxWithdrawAmount = st.maxWithdrawAllowed(poolStAddress, user);
+        uint256 maxWithdrawOrderAmount = st.maxWithdrawOrderAllowed(poolStAddress, user);
+        return (maxWithdrawAmount, maxWithdrawOrderAmount);
     }
 }

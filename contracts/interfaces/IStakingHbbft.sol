@@ -10,13 +10,17 @@ interface IStakingHbbft {
     function stakingEpochStartBlock() external view returns (uint256);
     function areStakeAndWithdrawAllowed() external view returns (bool);
     function stakeAmountTotal(address) external view returns (uint256);
+    function poolNodeOperator(address) external view returns (address);
     function stakingFixedEpochEndTime() external view returns (uint256);
     function getPoolsInactive() external view returns (address[] memory);
     function stakingFixedEpochDuration() external view returns (uint256);
     function stakeAmount(address, address) external view returns (uint256);
     function getPoolsToBeElected() external view returns (address[] memory);
+    function poolNodeOperatorShare(address) external view returns (uint256);
     function stakingWithdrawDisallowPeriod() external view returns (uint256);
     function poolDelegators(address) external view returns (address[] memory);
     function orderWithdrawEpoch(address, address) external view returns (uint256);
+    function maxWithdrawAllowed(address, address) external view returns (uint256);
     function orderedWithdrawAmount(address, address) external view returns (uint256);
+    function maxWithdrawOrderAllowed(address, address) external view returns (uint256);
 }

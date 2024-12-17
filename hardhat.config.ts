@@ -1,4 +1,4 @@
-import fs from "fs";
+import * as fs from "fs";
 import { ethers } from "ethers";
 import { HardhatUserConfig } from "hardhat/config";
 
@@ -20,6 +20,8 @@ const mnemonic: string = process.env.MNEMONIC ? process.env.MNEMONIC : ethers.Mn
 const chainIds = {
   hardhat: 31337,
   alpha4: 777018,
+  alpha5: 777019,
+  beta: 27272,
 };
 
 const config: HardhatUserConfig = {
@@ -47,16 +49,27 @@ const config: HardhatUserConfig = {
       },
       gasPrice: 1000000000,
     },
+    beta: {
+      url: "https://beta-rpc.bit.diamonds",
+      accounts: {
+        mnemonic: getMnemonic(),
+        path: "m/44'/60'/0'/0",
+        initialIndex: 0,
+        count: 20,
+        passphrase: "",
+      },
+      gasPrice: 1000000000,
+    },
   },
   etherscan: {
     apiKey: "123",
     customChains: [
       {
-        network: "alpha4",
-        chainId: 777018,
+        network: "beta",
+        chainId: 27272,
         urls: {
-            apiURL: "http://62.171.133.46:4400/api",
-            browserURL: "http://62.171.133.46:4400",
+          apiURL: "http://62.84.188.137/api",
+          browserURL: "http://62.84.188.137",
         },
       },
     ],
