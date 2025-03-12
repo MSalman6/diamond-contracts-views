@@ -3,6 +3,7 @@ pragma solidity =0.8.25;
 
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 
+import { IDiamondDao } from "./interfaces/IDao.sol";
 import { IStakingHbbft } from "./interfaces/IStakingHbbft.sol";
 import { ITxPermission } from "./interfaces/ITxPermission.sol";
 import { IKeyGenHistory } from "./interfaces/IKeyGenHistory.sol";
@@ -10,8 +11,10 @@ import { IBlockRewardHbbft } from "./interfaces/IBlockRewardHbbft.sol";
 import { IBonusScoreSystem } from "./interfaces/IBonusScoreSystem.sol";
 import { IValidatorSetHbbft } from "./interfaces/IValidatorSetHbbft.sol";
 import { IConnectivityTracker } from "./interfaces/IConnectivityTracker.sol";
+import { DaoPhase, Proposal, ProposalState, ProposalType, VotingResult } from "./library/DaoStructs.sol";
 
 contract DMDAggregator is Ownable {
+    IDiamondDao dao;
     IStakingHbbft st;
     ITxPermission tp;
     IKeyGenHistory kh;
@@ -20,7 +23,8 @@ contract DMDAggregator is Ownable {
     IValidatorSetHbbft vs;
     IConnectivityTracker ct;
 
-    constructor(address initialOwner, address _st, address _vs, address _tp) Ownable(initialOwner) {
+    constructor(address initialOwner, address _st, address _vs, address _tp, address _dao) Ownable(initialOwner) {
+        dao = IDiamondDao(_dao);
         st = IStakingHbbft(_st);
         tp = ITxPermission(_tp);
         vs = IValidatorSetHbbft(_vs);
@@ -85,34 +89,24 @@ contract DMDAggregator is Ownable {
         uint256 delegatedAmount;
     }
 
-    enum ProposalState {
-        Created,
-        Canceled,
-        Active,
-        VotingFinished,
-        Accepted,
-        Declined,
-        Executed
-    }
-
-    enum ProposalType {
-        Open,
-        ContractUpgrade,
-        EcosystemParameterChange
-    }
-
-    struct Proposal {
-        address proposer;
-        uint64 votingDaoEpoch;
-        ProposalState state;
-        address[] targets;
-        uint256[] values;
-        bytes[] calldatas;
-        string title;
-        string description;
-        string discussionUrl;
+    struct DaoGlobals {
+        uint256 createProposalFee;
+        DaoPhase daoPhase;
         uint256 daoPhaseCount;
-        ProposalType proposalType;
+        uint256 daoPotBalance;
+    }
+
+    struct ProposalDetails {
+        Proposal proposal;
+        address[] voters;
+        VotingResult votingResult;
+        uint256 votersCount;
+    }
+
+    struct VotingStats {
+        address[] voters;
+        VotingResult votingResult;
+        uint256 votersCount;
     }
 
     // SETTERS
@@ -257,5 +251,49 @@ contract DMDAggregator is Ownable {
         uint256 maxWithdrawAmount = st.maxWithdrawAllowed(poolStAddress, user);
         uint256 maxWithdrawOrderAmount = st.maxWithdrawOrderAllowed(poolStAddress, user);
         return (maxWithdrawAmount, maxWithdrawOrderAmount);
+    }
+
+    // DAO FUNCTIONS
+    function getDaoGlobals() external view returns (DaoGlobals memory) {
+        return DaoGlobals({
+            createProposalFee: dao.createProposalFee(),
+            daoPhase: dao.daoPhase(),
+            daoPhaseCount: dao.daoPhaseCount(),
+            daoPotBalance: address(dao).balance
+        });
+    }
+
+    function getVotingStats(uint256 proposalId) public view returns (VotingStats memory) {
+        return VotingStats({
+            voters: dao.getProposalVoters(proposalId),
+            votingResult: dao.countVotes(proposalId),
+            votersCount: dao.getProposalVotersCount(proposalId)
+        });
+    }
+
+    function getProposalDetails(uint256 proposalId) public view returns (ProposalDetails memory) {
+        VotingStats memory votingStats = getVotingStats(proposalId);
+
+        return ProposalDetails({
+            proposal: dao.getProposal(proposalId),
+            voters: votingStats.voters,
+            votingResult: votingStats.votingResult,
+            votersCount: votingStats.votersCount
+        });
+    }
+
+    function getProposalsDetails(uint256[] memory proposalIds) public view returns (ProposalDetails[] memory) {
+        ProposalDetails[] memory proposals = new ProposalDetails[](proposalIds.length);
+
+        for (uint256 i = 0; i < proposalIds.length; i++) {
+            proposals[i] = getProposalDetails(proposalIds[i]);
+        }
+
+        return proposals;
+    }
+
+    function getActiveProposals() external view returns (ProposalDetails[] memory) {
+        uint256[] memory activeProposals = dao.currentPhaseProposals();
+        return getProposalsDetails(activeProposals);
     }
 }
