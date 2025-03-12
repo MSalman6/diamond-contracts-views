@@ -3,7 +3,7 @@ pragma solidity =0.8.25;
 
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 
-import { IDiamondDao } from "./interfaces/IDao.sol";
+import { IDiamondDao } from "./interfaces/IDiamondDao.sol";
 import { IStakingHbbft } from "./interfaces/IStakingHbbft.sol";
 import { ITxPermission } from "./interfaces/ITxPermission.sol";
 import { IKeyGenHistory } from "./interfaces/IKeyGenHistory.sol";
@@ -101,12 +101,7 @@ contract DMDAggregator is Ownable {
         address[] voters;
         VotingResult votingResult;
         uint256 votersCount;
-    }
-
-    struct VotingStats {
-        address[] voters;
-        VotingResult votingResult;
-        uint256 votersCount;
+        uint256 totalDaoStake;
     }
 
     // SETTERS
@@ -263,22 +258,16 @@ contract DMDAggregator is Ownable {
         });
     }
 
-    function getVotingStats(uint256 proposalId) public view returns (VotingStats memory) {
-        return VotingStats({
-            voters: dao.getProposalVoters(proposalId),
-            votingResult: dao.countVotes(proposalId),
-            votersCount: dao.getProposalVotersCount(proposalId)
-        });
-    }
-
     function getProposalDetails(uint256 proposalId) public view returns (ProposalDetails memory) {
-        VotingStats memory votingStats = getVotingStats(proposalId);
+        Proposal memory proposal = dao.getProposal(proposalId);
+        uint256 totalDaoStake = dao.daoEpochTotalStakeSnapshot(proposal.daoPhaseCount);
 
         return ProposalDetails({
-            proposal: dao.getProposal(proposalId),
-            voters: votingStats.voters,
-            votingResult: votingStats.votingResult,
-            votersCount: votingStats.votersCount
+            proposal: proposal,
+            voters: dao.getProposalVoters(proposalId),
+            votingResult: dao.countVotes(proposalId),
+            votersCount: dao.getProposalVotersCount(proposalId),
+            totalDaoStake: totalDaoStake > 0 ? totalDaoStake : st.stakeAmountTotal(address(dao))
         });
     }
 

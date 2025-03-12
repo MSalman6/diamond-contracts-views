@@ -104,4 +104,6 @@ interface IDiamondDao {
     function getProposalVoters(uint256 proposalId) external view returns (address[] memory);
 
     function currentPhaseProposals() external view returns (uint256[] memory);
+
+    function daoEpochTotalStakeSnapshot(uint256 daoEpoch) external view returns (uint256);
 }
