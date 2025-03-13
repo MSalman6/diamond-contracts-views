@@ -10,7 +10,8 @@ async function deploy() {
     deployer.address, // Initial Owner
     '0x1100000000000000000000000000000000000001', // Staking
     '0x1000000000000000000000000000000000000001', // ValidatorSet
-    '0x4000000000000000000000000000000000000001' // TxPermisson
+    '0x4000000000000000000000000000000000000001', // TxPermisson
+    '0xDA0da0da0Da0Da0Da0DA00DA0da0da0DA0DA0dA0' // DAO
   ]
 
   // Deploy the DMDAggregator contract using a proxy for upgradeability

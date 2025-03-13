@@ -68,8 +68,8 @@ const config: HardhatUserConfig = {
         network: "beta",
         chainId: 27272,
         urls: {
-          apiURL: "http://62.84.188.137/api",
-          browserURL: "http://62.84.188.137",
+          apiURL: "https://beta-explorer.bit.diamonds/api",
+          browserURL: "https://beta-explorer.bit.diamonds",
         },
       },
     ],
