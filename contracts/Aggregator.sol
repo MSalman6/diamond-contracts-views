@@ -281,8 +281,44 @@ contract DMDAggregator is Ownable {
         return proposals;
     }
 
-    function getActiveProposals() external view returns (ProposalDetails[] memory) {
+    function getActiveProposals() public view returns (ProposalDetails[] memory) {
         uint256[] memory activeProposals = dao.currentPhaseProposals();
         return getProposalsDetails(activeProposals);
+    }
+
+    function getDaoPhaseProposals(uint256 daoPhase) public view returns (ProposalDetails[] memory) {
+        uint256[] memory daoPhaseProposals = dao.daoPhaseProposals(daoPhase);
+        return getProposalsDetails(daoPhaseProposals);
+    }
+
+    function getHistoricProposals() external view returns (ProposalDetails[] memory) {
+        uint256 totalProposals = 0;
+        uint256 phaseCount = dao.daoPhaseCount();
+        
+        // First, count all proposals across all dao phases
+        for (uint256 i = 1; i <= phaseCount; i++) {
+            uint256[] memory proposalIds = dao.daoPhaseProposals(i);
+            totalProposals += proposalIds.length;
+        }
+        
+        uint256 index = 0;
+        ProposalDetails[] memory phaseProposals;
+        ProposalDetails[] memory historicProposals = new ProposalDetails[](totalProposals);
+
+        // Populate the historic proposals array
+        for (uint256 i = 1; i <= phaseCount; i++) {
+            if (i == phaseCount) {
+                phaseProposals = getActiveProposals();
+            } else {
+                phaseProposals = getDaoPhaseProposals(i);
+            }
+
+            for (uint256 j = 0; j < phaseProposals.length; j++) {
+                historicProposals[index] = phaseProposals[j];
+                index++;
+            }
+        }
+        
+        return historicProposals;
     }
 }
