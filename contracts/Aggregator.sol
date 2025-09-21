@@ -3,25 +3,35 @@ pragma solidity =0.8.25;
 
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 
+import { IDiamondDao } from "./interfaces/IDiamondDao.sol";
 import { IStakingHbbft } from "./interfaces/IStakingHbbft.sol";
 import { ITxPermission } from "./interfaces/ITxPermission.sol";
 import { IKeyGenHistory } from "./interfaces/IKeyGenHistory.sol";
 import { IBlockRewardHbbft } from "./interfaces/IBlockRewardHbbft.sol";
+import { IBonusScoreSystem } from "./interfaces/IBonusScoreSystem.sol";
 import { IValidatorSetHbbft } from "./interfaces/IValidatorSetHbbft.sol";
+import { IConnectivityTracker } from "./interfaces/IConnectivityTracker.sol";
+import { DaoPhase, Proposal, ProposalState, ProposalType, VotingResult } from "./library/DaoStructs.sol";
 
 contract DMDAggregator is Ownable {
+    IDiamondDao dao;
     IStakingHbbft st;
     ITxPermission tp;
     IKeyGenHistory kh;
     IBlockRewardHbbft br;
+    IBonusScoreSystem bs;
     IValidatorSetHbbft vs;
+    IConnectivityTracker ct;
 
-    constructor(address initialOwner, address _st, address _vs, address _tp) Ownable(initialOwner) {
+    constructor(address initialOwner, address _st, address _vs, address _tp, address _dao) Ownable(initialOwner) {
+        dao = IDiamondDao(_dao);
         st = IStakingHbbft(_st);
         tp = ITxPermission(_tp);
         vs = IValidatorSetHbbft(_vs);
+        bs = IBonusScoreSystem(vs.bonusScoreSystem());
         kh = IKeyGenHistory(vs.keyGenHistoryContract());
         br = IBlockRewardHbbft(vs.blockRewardContract());
+        ct = IConnectivityTracker(bs.connectivityTracker());
     }
 
     struct Pools {
@@ -57,6 +67,9 @@ contract DMDAggregator is Ownable {
         address[] delegators;
         IValidatorSetHbbft.KeyGenMode keygenMode;
         uint256 stakedAmountTotal;
+        bool isFaultyValidator;
+        uint256 validatorScore;
+        uint256 connectivityScore;
     }
 
     struct StakeData {
@@ -76,34 +89,19 @@ contract DMDAggregator is Ownable {
         uint256 delegatedAmount;
     }
 
-    enum ProposalState {
-        Created,
-        Canceled,
-        Active,
-        VotingFinished,
-        Accepted,
-        Declined,
-        Executed
-    }
-
-    enum ProposalType {
-        Open,
-        ContractUpgrade,
-        EcosystemParameterChange
-    }
-
-    struct Proposal {
-        address proposer;
-        uint64 votingDaoEpoch;
-        ProposalState state;
-        address[] targets;
-        uint256[] values;
-        bytes[] calldatas;
-        string title;
-        string description;
-        string discussionUrl;
+    struct DaoGlobals {
+        uint256 createProposalFee;
+        DaoPhase daoPhase;
         uint256 daoPhaseCount;
-        ProposalType proposalType;
+        uint256 daoPotBalance;
+    }
+
+    struct ProposalDetails {
+        Proposal proposal;
+        address[] voters;
+        VotingResult votingResult;
+        uint256 votersCount;
+        uint256 totalDaoStake;
     }
 
     // SETTERS
@@ -150,6 +148,7 @@ contract DMDAggregator is Ownable {
         poolsData = new PoolData[](_sAs.length);
 
         for (uint256 i = 0; i < _sAs.length; i++) {
+            uint256 stakingEpoch = st.stakingEpoch();
             address miningAddress = vs.miningByStakingAddress(_sAs[i]);
             poolsData[i] = PoolData({
                 miningAddress: miningAddress,
@@ -157,7 +156,10 @@ contract DMDAggregator is Ownable {
                 publicKey: vs.getPublicKey(miningAddress),
                 delegators: st.poolDelegators(_sAs[i]),
                 keygenMode: vs.getPendingValidatorKeyGenerationMode(miningAddress),
-                stakedAmountTotal: st.stakeAmountTotal(_sAs[i])
+                stakedAmountTotal: st.stakeAmountTotal(_sAs[i]),
+                isFaultyValidator: ct.isFaultyValidator(stakingEpoch, miningAddress),
+                validatorScore: bs.getValidatorScore(miningAddress),
+                connectivityScore: ct.getValidatorConnectivityScore(stakingEpoch, miningAddress)
             });
         }
     }
@@ -232,5 +234,91 @@ contract DMDAggregator is Ownable {
         }
         
         return stakingAddresses;
+    }
+
+    function getNodeOperatorData(address stakingAddress) external view returns (address, uint256) {
+        address operator = st.poolNodeOperator(stakingAddress);
+        uint256 share = st.poolNodeOperatorShare(stakingAddress);
+        return (operator, share);
+    }
+
+    function getWithdrawableAmounts(address poolStAddress, address user) external view returns (uint256, uint256) {
+        uint256 maxWithdrawAmount = st.maxWithdrawAllowed(poolStAddress, user);
+        uint256 maxWithdrawOrderAmount = st.maxWithdrawOrderAllowed(poolStAddress, user);
+        return (maxWithdrawAmount, maxWithdrawOrderAmount);
+    }
+
+    // DAO FUNCTIONS
+    function getDaoGlobals() external view returns (DaoGlobals memory) {
+        return DaoGlobals({
+            createProposalFee: dao.createProposalFee(),
+            daoPhase: dao.daoPhase(),
+            daoPhaseCount: dao.daoPhaseCount(),
+            daoPotBalance: address(dao).balance
+        });
+    }
+
+    function getProposalDetails(uint256 proposalId) public view returns (ProposalDetails memory) {
+        Proposal memory proposal = dao.getProposal(proposalId);
+        uint256 totalDaoStake = dao.daoEpochTotalStakeSnapshot(proposal.daoPhaseCount);
+
+        return ProposalDetails({
+            proposal: proposal,
+            voters: dao.getProposalVoters(proposalId),
+            votingResult: dao.countVotes(proposalId),
+            votersCount: dao.getProposalVotersCount(proposalId),
+            totalDaoStake: totalDaoStake > 0 ? totalDaoStake : st.stakeAmountTotal(address(dao))
+        });
+    }
+
+    function getProposalsDetails(uint256[] memory proposalIds) public view returns (ProposalDetails[] memory) {
+        ProposalDetails[] memory proposals = new ProposalDetails[](proposalIds.length);
+
+        for (uint256 i = 0; i < proposalIds.length; i++) {
+            proposals[i] = getProposalDetails(proposalIds[i]);
+        }
+
+        return proposals;
+    }
+
+    function getActiveProposals() public view returns (ProposalDetails[] memory) {
+        uint256[] memory activeProposals = dao.currentPhaseProposals();
+        return getProposalsDetails(activeProposals);
+    }
+
+    function getDaoPhaseProposals(uint256 daoPhase) public view returns (ProposalDetails[] memory) {
+        uint256[] memory daoPhaseProposals = dao.daoPhaseProposals(daoPhase);
+        return getProposalsDetails(daoPhaseProposals);
+    }
+
+    function getHistoricProposals() external view returns (ProposalDetails[] memory) {
+        uint256 totalProposals = 0;
+        uint256 phaseCount = dao.daoPhaseCount();
+        
+        // First, count all proposals across all dao phases
+        for (uint256 i = 1; i <= phaseCount; i++) {
+            uint256[] memory proposalIds = dao.daoPhaseProposals(i);
+            totalProposals += proposalIds.length;
+        }
+        
+        uint256 index = 0;
+        ProposalDetails[] memory phaseProposals;
+        ProposalDetails[] memory historicProposals = new ProposalDetails[](totalProposals);
+
+        // Populate the historic proposals array
+        for (uint256 i = 1; i <= phaseCount; i++) {
+            if (i == phaseCount) {
+                phaseProposals = getActiveProposals();
+            } else {
+                phaseProposals = getDaoPhaseProposals(i);
+            }
+
+            for (uint256 j = 0; j < phaseProposals.length; j++) {
+                historicProposals[index] = phaseProposals[j];
+                index++;
+            }
+        }
+        
+        return historicProposals;
     }
 }
