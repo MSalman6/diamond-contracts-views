@@ -22,6 +22,7 @@ const chainIds = {
   alpha4: 777018,
   alpha5: 777019,
   beta: 27272,
+  testnet: 37373,
 };
 
 const config: HardhatUserConfig = {
@@ -60,6 +61,17 @@ const config: HardhatUserConfig = {
       },
       gasPrice: 1000000000,
     },
+    testnet: {
+      url: "http://62.171.133.46:20100",
+      accounts: {
+        mnemonic: getMnemonic(),
+        path: "m/44'/60'/0'/0",
+        initialIndex: 0,
+        count: 20,
+        passphrase: "",
+      },
+      gasPrice: 1000000000,
+    },
   },
   etherscan: {
     apiKey: "123",
@@ -70,6 +82,14 @@ const config: HardhatUserConfig = {
         urls: {
           apiURL: "https://beta-explorer.bit.diamonds/api",
           browserURL: "https://beta-explorer.bit.diamonds",
+        },
+      },
+      {
+        network: "testnet",
+        chainId: 37373,
+        urls: {
+            apiURL: "http://62.171.133.46:4000/api",
+            browserURL: "http://62.171.133.46:4000",
         },
       },
     ],
